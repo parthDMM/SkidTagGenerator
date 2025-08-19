@@ -390,10 +390,10 @@
     doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.text(String(qty), x + 1.0, y + 0.07); y += 0.6;
 
     doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Inventory Code:', x, y);
-    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(String(code), x + 1.35, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(String(code), x + 1.35, y);
 
     // Notes box
-    const notesX = margin.l + 4.0, notesY = margin.t + 0.6, notesW = 6.2, notesH = 2.1;
+    const notesX = margin.l + 5.0, notesY = margin.t + 0.6, notesW = 5, notesH = 2;
     doc.setLineWidth(0.01); doc.rect(notesX, notesY, notesW, notesH);
     doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Notes:', notesX + 0.1, notesY + 0.2);
     doc.setFont('helvetica','');
