@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skid Tag Generator</title>
+
+  <!-- Fonts & Tailwind (CDN for internal tool simplicity) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"] },
+          boxShadow: { card: "0 10px 25px -10px rgba(0,0,0,0.25)" }
+        }
+      },
+      darkMode: 'media'
+    }
+  </script>
+
+  <!-- Libraries -->
+  <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    html, body { height: 100%; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-20 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-slate-200">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-xl md:text-2xl font-semibold tracking-tight">Skid Tag Generator</h1>
+      <div class="flex items-center gap-2 text-sm">
+        <button id="refreshBtn" class="px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 active:scale-[.99] transition">Refresh Data</button>
+        <details class="relative group">
+          <summary class="list-none cursor-pointer px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100">Settings</summary>
+          <div class="absolute right-0 mt-2 w-[28rem] max-w-[90vw] p-4 rounded-2xl shadow-card bg-white border border-slate-200">
+            <label class="block text-sm font-medium">Data Source (CSV URL)</label>
+            <input id="csvUrlInput" type="url" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="https://.../pub?output=csv">
+            <p class="text-xs text-slate-500 mt-1">For internal-only data, use a domain-restricted endpoint (e.g., Google Apps Script web app) rather than a public <code>pub?output=csv</code> link.</p>
+            <div class="flex gap-2 justify-end mt-3">
+              <button id="saveSettingsBtn" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Save</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Card -->
+    <div class="rounded-2xl shadow-card bg-white border border-slate-200 p-5 md:p-8">
+      <form id="skidTagForm" class="grid grid-cols-1 md:grid-cols-2 gap-5" onsubmit="return false;">
+        <div>
+          <label for="skidPaperSize" class="block text-sm font-medium">Skid Paper Size</label>
+          <select id="skidPaperSize" required class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+        </div>
+        <div>
+          <label for="paperType" class="block text-sm font-medium">Paper Type</label>
+          <select id="paperType" required class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+        </div>
+        <div>
+          <label for="paperWeight" class="block text-sm font-medium">Paper Weight</label>
+          <select id="paperWeight" required class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+        </div>
+        <div>
+          <label for="quantity" class="block text-sm font-medium">Quantity</label>
+          <input type="number" id="quantity" min="1" inputmode="numeric" required class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter quantity" />
+        </div>
+        <div class="md:col-span-2">
+          <label for="notes" class="block text-sm font-medium">Notes (optional)</label>
+          <textarea id="notes" rows="3" class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Any special handling, order refs, etc."></textarea>
+        </div>
+
+        <div class="md:col-span-2 flex flex-wrap gap-3 pt-2">
+          <button id="previewBtn" class="px-4 py-2 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[.99]">Generate Preview</button>
+          <button id="downloadPdfBtn" class="px-4 py-2 rounded-2xl bg-slate-900 text-white hover:bg-slate-800 active:scale-[.99] disabled:opacity-40 disabled:cursor-not-allowed" disabled>Download PDF (Letter • Landscape)</button>
+          <button id="resetBtn" type="reset" class="px-4 py-2 rounded-2xl border border-slate-300 hover:bg-slate-100">Reset</button>
+        </div>
+      </form>
+
+      <!-- Preview -->
+      <section id="output" class="mt-8 hidden">
+        <h2 class="text-lg font-semibold mb-3">Preview</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="rounded-xl border border-slate-200 p-4">
+            <dl class="divide-y divide-slate-100 text-sm">
+              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Skid Paper Size</dt><dd id="outSkidPaperSize" class="font-medium"></dd></div>
+              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Paper Type</dt><dd id="outPaperType" class="font-medium"></dd></div>
+              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Paper Weight</dt><dd id="outPaperWeight" class="font-medium"></dd></div>
+              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Quantity</dt><dd id="outQuantity" class="font-medium"></dd></div>
+              <div class="py-2 flex items-center justify-between gap-4"><dt class="text-slate-500">Inventory Code</dt>
+                <dd class="flex items-center gap-2">
+                  <span id="outInventoryCode" class="font-semibold"></span>
+                  <button id="copyCodeBtn" class="text-xs px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-100">Copy</button>
+                </dd>
+              </div>
+            </dl>
+          </div>
+          <div class="rounded-xl border border-slate-200 p-4 lg:col-span-2">
+            <svg id="barcode" class="w-full"></svg>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 hidden max-w-sm rounded-xl border border-slate-200 bg-white shadow-card p-4 text-sm"></div>
+  </main>
+
+  <footer class="py-8 text-center text-xs text-slate-500">
+    <p>© <span id="year"></span> Internal Tool</p>
+  </footer>
+
+<script>
+(function(){
+  const DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRTWMJhnfID1BL63MkRIwQ4Yl8r5MtI0YMFfO4w7nb2Aj07FQWWeJwcOGr4CvZQLCdH-ZLyNBltxpIs/pub?output=csv";
+  const STORAGE_KEYS = {
+    csvUrl: 'skid.csvUrl',
+    lastForm: 'skid.lastForm'
+  };
+
+  const els = {
+    skidPaperSize: document.getElementById('skidPaperSize'),
+    paperType: document.getElementById('paperType'),
+    paperWeight: document.getElementById('paperWeight'),
+    quantity: document.getElementById('quantity'),
+    notes: document.getElementById('notes'),
+    output: document.getElementById('output'),
+    outSkidPaperSize: document.getElementById('outSkidPaperSize'),
+    outPaperType: document.getElementById('outPaperType'),
+    outPaperWeight: document.getElementById('outPaperWeight'),
+    outQuantity: document.getElementById('outQuantity'),
+    outInventoryCode: document.getElementById('outInventoryCode'),
+    barcode: document.getElementById('barcode'),
+    toast: document.getElementById('toast'),
+    downloadPdfBtn: document.getElementById('downloadPdfBtn'),
+    previewBtn: document.getElementById('previewBtn'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    csvUrlInput: document.getElementById('csvUrlInput'),
+    saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+    copyCodeBtn: document.getElementById('copyCodeBtn'),
+  };
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  function showToast(msg, type = 'info'){
+    els.toast.textContent = msg;
+    els.toast.className = `fixed bottom-4 right-4 max-w-sm rounded-xl border p-4 text-sm shadow-card ${type==='error'?'bg-rose-50 border-rose-200 text-rose-900':'bg-white border-slate-200 text-slate-900'}`;
+    els.toast.classList.remove('hidden');
+    setTimeout(()=> els.toast.classList.add('hidden'), 3500);
+  }
+
+  function currentCsvUrl(){
+    return localStorage.getItem(STORAGE_KEYS.csvUrl) || DEFAULT_CSV_URL;
+  }
+
+  function saveCsvUrl(url){
+    if(url) localStorage.setItem(STORAGE_KEYS.csvUrl, url);
+  }
+
+  function persistForm(){
+    const obj = {
+      skidPaperSize: els.skidPaperSize.value,
+      paperType: els.paperType.value,
+      paperWeight: els.paperWeight.value,
+      quantity: els.quantity.value,
+      notes: els.notes.value
+    };
+    localStorage.setItem(STORAGE_KEYS.lastForm, JSON.stringify(obj));
+  }
+
+  function restoreForm(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.lastForm);
+      if(!raw) return;
+      const obj = JSON.parse(raw);
+      els.quantity.value = obj.quantity || '';
+      els.notes.value = obj.notes || '';
+      // selects restored after options load
+      setTimeout(()=>{
+        if(obj.skidPaperSize) els.skidPaperSize.value = obj.skidPaperSize;
+        if(obj.paperType) els.paperType.value = obj.paperType;
+        if(obj.paperWeight) els.paperWeight.value = obj.paperWeight;
+      }, 0);
+    } catch {}
+  }
+
+  async function loadSheetCsv(url){
+    const controller = new AbortController();
+    const t = setTimeout(()=> controller.abort(), 15000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(t);
+    if(!res.ok) throw new Error(`CSV fetch failed (${res.status})`);
+    return await res.text();
+  }
+
+  function parseCsv(text){
+    const out = Papa.parse(text, { skipEmptyLines: 'greedy' });
+    if(out.errors && out.errors.length){
+      console.warn('CSV parse warnings', out.errors);
+    }
+    return out.data; // array of arrays
+  }
+
+  function extractFirstNumber(s){
+    if(!s) return 0;
+    const m = String(s).match(/[\d.]+/);
+    return m ? parseFloat(m[0]) : 0;
+  }
+
+  function sizeArea(s){
+    if(!s) return 0;
+    const nums = String(s).match(/[\d.]+/g);
+    if(!nums || nums.length === 0) return 0;
+    if(nums.length >= 2){
+      return parseFloat(nums[0]) * parseFloat(nums[1]);
+    }
+    return parseFloat(nums[0]);
+  }
+
+  function populateDropdown(select, values, sortType){
+    select.innerHTML = '<option value="">— Select —</option>';
+    let arr = Array.from(values || []);
+    if(sortType === 'sizeDesc'){
+      arr.sort((a,b)=> sizeArea(b) - sizeArea(a));
+    } else if(sortType === 'weightAsc'){
+      arr.sort((a,b)=> extractFirstNumber(a) - extractFirstNumber(b));
+    } else {
+      arr.sort((a,b)=> String(a).localeCompare(String(b)));
+    }
+    for(const v of arr){
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = v;
+      select.appendChild(opt);
+    }
+  }
+
+  async function initDropdowns(){
+    try{
+      const csvText = await loadSheetCsv(currentCsvUrl());
+      const rows = parseCsv(csvText);
+      if(!rows || rows.length < 2) throw new Error('No data rows found');
+
+      const skidPaperSizes = new Set();
+      const paperTypes = new Set();
+      const paperWeights = new Set();
+
+      for(let i=1;i<rows.length;i++){
+        const r = rows[i];
+        if(!r || r.length < 3) continue;
+        if(r[0]) skidPaperSizes.add(String(r[0]).trim());
+        if(r[1]) paperTypes.add(String(r[1]).trim());
+        if(r[2]) paperWeights.add(String(r[2]).trim());
+      }
+
+      populateDropdown(els.skidPaperSize, skidPaperSizes, 'sizeDesc');
+      populateDropdown(els.paperType, paperTypes, 'alpha');
+      populateDropdown(els.paperWeight, paperWeights, 'weightAsc');
+      restoreForm();
+      showToast('Data loaded');
+    } catch(err){
+      console.error(err);
+      populateDropdown(els.skidPaperSize, [], 'alpha');
+      populateDropdown(els.paperType, [], 'alpha');
+      populateDropdown(els.paperWeight, [], 'alpha');
+      showToast('Could not load CSV. Check URL or network.', 'error');
+    }
+  }
+
+  function computeInventoryCode(size, type, weight){
+    return (String(size)+String(type)+String(weight))
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+
+  function generatePreview(){
+    const size = els.skidPaperSize.value;
+    const type = els.paperType.value;
+    const weight = els.paperWeight.value;
+    const qty = (els.quantity.value || '').trim();
+
+    if(!size || !type || !weight || !qty){
+      showToast('Please complete all fields.');
+      return;
+    }
+
+    const code = computeInventoryCode(size, type, weight);
+    els.outSkidPaperSize.textContent = size;
+    els.outPaperType.textContent = type;
+    els.outPaperWeight.textContent = weight;
+    els.outQuantity.textContent = qty;
+    els.outInventoryCode.textContent = code;
+
+    JsBarcode(els.barcode, code || ' ', {
+      format: 'CODE128',
+      displayValue: true,
+      fontSize: 14,
+      height: 64,
+      width: 1.4,
+      margin: 8
+    });
+
+    els.output.classList.remove('hidden');
+    els.downloadPdfBtn.disabled = false;
+    persistForm();
+  }
+
+  function svgToPngDataUrl(svgEl, scale=3){
+    return new Promise((resolve, reject)=>{
+      try{
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(svgEl);
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = ()=>{
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = err => { URL.revokeObjectURL(url); reject(err); };
+        img.src = url;
+      }catch(e){ reject(e); }
+    });
+  }
+
+  function wrapText(doc, text, x, y, maxWidth, lineHeight){
+    if(!text) return y;
+    const words = String(text).split(/\s+/);
+    let line = '';
+    for(let n=0;n<words.length;n++){
+      const test = line ? line + ' ' + words[n] : words[n];
+      const w = doc.getTextWidth(test);
+      if(w > maxWidth){
+        doc.text(line, x, y); y += lineHeight; line = words[n];
+      } else {
+        line = test;
+      }
+    }
+    if(line){ doc.text(line, x, y); y += lineHeight; }
+    return y;
+  }
+
+  async function downloadPdf(){
+    // Ensure preview is up to date
+    generatePreview();
+
+    const size = els.outSkidPaperSize.textContent || '';
+    const type = els.outPaperType.textContent || '';
+    const weight = els.outPaperWeight.textContent || '';
+    const qty = els.outQuantity.textContent || '';
+    const code = els.outInventoryCode.textContent || '';
+    const notes = els.notes.value || '';
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: 'letter' });
+
+    const margin = { l: 0.35, t: 0.35, r: 0.35, b: 0.35 };
+    const contentW = 11 - margin.l - margin.r;
+
+    // Header
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(18);
+    doc.text('SKID TAG', margin.l, margin.t + 0.25);
+    doc.setLineWidth(0.02);
+    doc.line(margin.l, margin.t + 0.35, margin.l + contentW, margin.t + 0.35);
+
+    // Details
+    let x = margin.l + 0.1, y = margin.t + 0.65;
+    doc.setFont('helvetica',''); doc.setFontSize(12);
+    doc.text('Skid Paper Size:', x, y); doc.setFont('helvetica','bold'); doc.text(String(size), x + 2.1, y); y += 0.28;
+    doc.setFont('helvetica',''); doc.text('Paper Type:', x, y); doc.setFont('helvetica','bold'); doc.text(String(type), x + 2.1, y); y += 0.28;
+    doc.setFont('helvetica',''); doc.text('Paper Weight:', x, y); doc.setFont('helvetica','bold'); doc.text(String(weight), x + 2.1, y); y += 0.4;
+
+    doc.setFont('helvetica',''); doc.text('Quantity:', x, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.text(String(qty), x + 1.0, y + 0.07); y += 0.6;
+
+    doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Inventory Code:', x, y);
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text(String(code), x + 1.35, y);
+
+    // Notes box
+    const notesX = margin.l + 4.0, notesY = margin.t + 0.6, notesW = 6.2, notesH = 2.1;
+    doc.setLineWidth(0.01); doc.rect(notesX, notesY, notesW, notesH);
+    doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Notes:', notesX + 0.1, notesY + 0.2);
+    doc.setFont('helvetica','');
+    const notesMaxWidth = notesW - 0.2; // inches of text width
+    const startY = notesY + 0.45;
+    doc.setFontSize(11);
+    wrapText(doc, notes, notesX + 0.1, startY, notesMaxWidth, 0.22);
+
+    // Barcode
+    try{
+      const dataUrl = await svgToPngDataUrl(els.barcode, 3);
+      const bw = 4.3, bh = 1.3, bx = margin.l + 4.0, by = margin.t + 3.0;
+      doc.addImage(dataUrl, 'PNG', bx, by, bw, bh);
+    }catch(e){
+      doc.setFont('helvetica','bold'); doc.setFontSize(20);
+      doc.text(code, margin.l + 4.0, margin.t + 3.4);
+    }
+
+    // Footer
+    doc.setFont('helvetica',''); doc.setFontSize(9);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin.l, 8.5 - margin.b + 0.05);
+
+    doc.save(`skid_tag_${code || 'TAG'}.pdf`);
+  }
+
+  // Events
+  els.previewBtn.addEventListener('click', generatePreview);
+  els.downloadPdfBtn.addEventListener('click', downloadPdf);
+  els.refreshBtn.addEventListener('click', initDropdowns);
+  els.resetBtn.addEventListener('click', ()=>{
+    els.output.classList.add('hidden');
+    els.downloadPdfBtn.disabled = true;
+    localStorage.removeItem(STORAGE_KEYS.lastForm);
+  });
+  els.saveSettingsBtn.addEventListener('click', ()=>{
+    const url = els.csvUrlInput.value.trim();
+    if(url){ saveCsvUrl(url); initDropdowns(); showToast('Settings saved.'); }
+  });
+  els.copyCodeBtn.addEventListener('click', ()=>{
+    const code = els.outInventoryCode.textContent || '';
+    if(!code) return;
+    navigator.clipboard.writeText(code).then(()=> showToast('Inventory code copied')).catch(()=>{});
+  });
+
+  // Init
+  els.csvUrlInput.value = currentCsvUrl();
+  initDropdowns();
+})();
+</script>
+</body>
+</html>
