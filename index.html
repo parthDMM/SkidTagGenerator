@@ -88,22 +88,38 @@
       <!-- Preview -->
       <section id="output" class="mt-8 hidden">
         <h2 class="text-lg font-semibold mb-3">Preview</h2>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div class="rounded-xl border border-slate-200 p-4">
+        <div class="flex flex-col lg:flex-row gap-5">
+          
+          <!-- Content Card -->
+          <div class="rounded-xl border border-slate-200 p-4 w-fit">
             <dl class="divide-y divide-slate-100 text-sm">
-              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Skid Paper Size</dt><dd id="outSkidPaperSize" class="font-medium"></dd></div>
-              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Paper Type</dt><dd id="outPaperType" class="font-medium"></dd></div>
-              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Paper Weight</dt><dd id="outPaperWeight" class="font-medium"></dd></div>
-              <div class="py-2 flex justify-between gap-4"><dt class="text-slate-500">Quantity</dt><dd id="outQuantity" class="font-medium"></dd></div>
-              <div class="py-2 flex items-center justify-between gap-4"><dt class="text-slate-500">Inventory Code</dt>
-                <dd class="flex items-center gap-2">
+              <div class="py-2 flex justify-between gap-4">
+                <dt class="text-slate-500">Skid Paper Size</dt>
+                <dd id="outSkidPaperSize" class="font-medium"></dd>
+              </div>
+              <div class="py-2 flex justify-between gap-4">
+                <dt class="text-slate-500">Paper Type</dt>
+                <dd id="outPaperType" class="font-medium"></dd>
+              </div>
+              <div class="py-2 flex justify-between gap-4">
+                <dt class="text-slate-500">Paper Weight</dt>
+                <dd id="outPaperWeight" class="font-medium"></dd>
+              </div>
+              <div class="py-2 flex justify-between gap-4">
+                <dt class="text-slate-500">Quantity</dt>
+                <dd id="outQuantity" class="font-medium"></dd>
+              </div>
+              <div class="py-2 flex justify-between gap-4">
+                <dt class="text-slate-500">Inventory Code</dt>
+                <dd>
                   <span id="outInventoryCode" class="font-semibold"></span>
-                  <button id="copyCodeBtn" class="text-xs px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-100">Copy</button>
                 </dd>
               </div>
             </dl>
           </div>
-          <div class="rounded-xl border border-slate-200 p-4 lg:col-span-2">
+
+          <!-- Barcode -->
+          <div class="rounded-xl border border-slate-200 p-4 flex-1">
             <svg id="barcode" class="w-full"></svg>
           </div>
         </div>
@@ -356,7 +372,6 @@
   }
 
   async function downloadPdf(){
-    // Ensure preview is up to date
     generatePreview();
 
     const size = els.outSkidPaperSize.textContent || '';
@@ -369,55 +384,65 @@
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'landscape', unit: 'in', format: 'letter' });
 
-    const margin = { l: 0.35, t: 0.35, r: 0.35, b: 0.35 };
-    const contentW = 11 - margin.l - margin.r;
+    const pageW = 11, pageH = 8.5;
+    const margin = { l: 0.5, t: 0.5 };
 
     // Header
     doc.setFont('helvetica','bold');
-    doc.setFontSize(18);
-    doc.text('SKID TAG', margin.l, margin.t + 0.25);
-    doc.setLineWidth(0.02);
-    doc.line(margin.l, margin.t + 0.35, margin.l + contentW, margin.t + 0.35);
+    doc.setFontSize(24);  
+    doc.text('SKID TAG', margin.l, margin.t);
 
-    // Details
-    let x = margin.l + 0.1, y = margin.t + 0.65;
-    doc.setFont('helvetica',''); doc.setFontSize(12);
-    doc.text('Skid Paper Size:', x, y); doc.setFont('helvetica','bold'); doc.text(String(size), x + 2.1, y); y += 0.28;
-    doc.setFont('helvetica',''); doc.text('Paper Type:', x, y); doc.setFont('helvetica','bold'); doc.text(String(type), x + 2.1, y); y += 0.28;
-    doc.setFont('helvetica',''); doc.text('Paper Weight:', x, y); doc.setFont('helvetica','bold'); doc.text(String(weight), x + 2.1, y); y += 0.4;
+    // Details (font size 24 for all)
+    let x = margin.l, y = margin.t + 0.7;
+    doc.setFontSize(24);
+    doc.setFont('helvetica',''); doc.text('Skid Paper Size:', x, y); doc.setFont('helvetica','bold'); doc.text(String(size), x + 3, y); y += 0.5;
+    doc.setFont('helvetica',''); doc.text('Paper Type:', x, y); doc.setFont('helvetica','bold'); doc.text(String(type), x + 3, y); y += 0.5;
+    doc.setFont('helvetica',''); doc.text('Paper Weight:', x, y); doc.setFont('helvetica','bold'); doc.text(String(weight), x + 3, y); y += 0.5;
+    doc.setFont('helvetica',''); doc.text('Quantity:', x, y); doc.setFont('helvetica','bold'); doc.text(String(qty), x + 3, y); y += 0.5;
+    doc.setFont('helvetica',''); doc.text('Inventory Code:', x, y); doc.setFont('helvetica','bold'); doc.text(String(code), x + 3, y); y += 0.5;
 
-    doc.setFont('helvetica',''); doc.text('Quantity:', x, y);
-    doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.text(String(qty), x + 1.0, y + 0.07); y += 0.6;
-
-    doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Inventory Code:', x, y);
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(String(code), x + 1.35, y);
-
-    // Notes box
-    const notesX = margin.l + 5.0, notesY = margin.t + 0.6, notesW = 5, notesH = 2;
-    doc.setLineWidth(0.01); doc.rect(notesX, notesY, notesW, notesH);
-    doc.setFont('helvetica',''); doc.setFontSize(10); doc.text('Notes:', notesX + 0.1, notesY + 0.2);
-    doc.setFont('helvetica','');
-    const notesMaxWidth = notesW - 0.2; // inches of text width
-    const startY = notesY + 0.45;
-    doc.setFontSize(11);
-    wrapText(doc, notes, notesX + 0.1, startY, notesMaxWidth, 0.22);
-
-    // Barcode
-    try{
-      const dataUrl = await svgToPngDataUrl(els.barcode, 3);
-      const bw = 4.3, bh = 1.3, bx = margin.l + 4.0, by = margin.t + 3.0;
+    // Barcode – bigger and centered
+    let barcodeBottomY = 0;
+    try {
+      const dataUrl = await svgToPngDataUrl(els.barcode, 4);
+      const bw = 6.5, bh = 2.0; // larger barcode
+      const bx = (pageW - bw) / 2;
+      const by = (pageH - bh) / 2 + 0.5;
       doc.addImage(dataUrl, 'PNG', bx, by, bw, bh);
-    }catch(e){
-      doc.setFont('helvetica','bold'); doc.setFontSize(20);
-      doc.text(code, margin.l + 4.0, margin.t + 3.4);
+      barcodeBottomY = by + bh;
+    } catch(e) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(24);
+      doc.text(code, pageW/2, pageH/2, { align: 'center' });
+      barcodeBottomY = pageH/2 + 0.5;
     }
 
+    // Notes section – at bottom, filling remaining space
+    const notesMargin = 0.5;
+    const notesX = margin.l;
+    const notesY = barcodeBottomY + 0.5;
+    const notesW = pageW - 2 * margin.l;
+    const notesH = pageH - notesY - notesMargin;
+
+    doc.setLineWidth(0.02);
+    doc.rect(notesX, notesY, notesW, notesH);
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(30);
+    doc.text('Notes:', notesX + 0.2, notesY + 0.6);
+
+    doc.setFont('helvetica','');
+    doc.setFontSize(30);
+
+    // text wrapping inside the notes box
+    wrapText(doc, notes, notesX + 0.2, notesY + 1.1, notesW - 0.4, 0.5);
+
     // Footer
-    doc.setFont('helvetica',''); doc.setFontSize(9);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin.l, 8.5 - margin.b + 0.05);
+    doc.setFont('helvetica',''); doc.setFontSize(10);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin.l, pageH - 0.25);
 
     doc.save(`skid_tag_${code || 'TAG'}.pdf`);
   }
+
 
   // Events
   els.previewBtn.addEventListener('click', generatePreview);
